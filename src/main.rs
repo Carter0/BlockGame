@@ -3,12 +3,16 @@ use bevy::{
     sprite::collide_aabb::{collide, Collision},
 };
 
+use bevy::core::FixedTimestep;
 use std::fmt;
 
 const WINDOWHEIGHT: f32 = 900.0;
 const WINDOWWIDTH: f32 = 500.0;
 const JUMPVELOCITY: f32 = 300.0;
-const GRAVITY: f32 = -150.0;
+const GRAVITY: f32 = -10.0;
+
+// fixed timestep is 60 times every second
+const TIMESTEP_2_PER_SECOND: f64 = 1.0 / 60.0;
 
 fn main() {
     App::build()
@@ -26,8 +30,14 @@ fn main() {
         .add_startup_system(spawn_walls.system())
         .add_system(block_physics_system.system())
         .add_system(block_collisions_system.system())
-        .add_system(player_collision_system.system())
-        .add_system(player_movement_system.system())
+        .add_system_set(
+            SystemSet::new()
+                // This prints out "goodbye world" twice every second
+                .with_run_criteria(FixedTimestep::step(TIMESTEP_2_PER_SECOND))
+                .with_system(player_movement_system.system())
+                // NOTE not sure if belongs in fixedupdate or update
+                .with_system(player_collision_system.system())
+        )
         .run();
 }
 
@@ -190,6 +200,7 @@ struct PlayerPhysics {
     gravity: f32,
     movement_speed: f32,
     is_grounded: IsGrounded,
+    fall_speed: f32
 }
 
 enum IsGrounded {
@@ -212,18 +223,26 @@ fn add_player(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial
     commands
         .spawn_bundle(SpriteBundle {
             material: materials.add(Color::rgb(0.5, 0.5, 1.0).into()),
-            transform: Transform::from_xyz(0.0, -WINDOWHEIGHT / 2.0 + 180.0, 1.0),
+            transform: Transform::from_xyz(100.0, -WINDOWHEIGHT / 2.0 + 280.0, 1.0),
             sprite: Sprite::new(Vec2::new(30.0, 30.0)),
             ..Default::default()
         })
         .insert(PlayerPhysics {
             is_grounded: IsGrounded::Grounded,
-            movement_speed: 100.0,
+            movement_speed: 50.0,
             jump_velocity: JUMPVELOCITY,
             gravity: GRAVITY,
+            fall_speed: 10.0
         });
 }
 
+// TODO yeah try combining this system and the player movement system
+// tehory is the parralellisation is having problems perhaps
+// do this in another branch
+// TODO Also this needs to happen in fixedupdate. Lets do some research on that
+// because that might very well be the problem :)
+// Yeah because as I noted these systems might be running at slightly different times when I actually
+// want it to run all at the same time
 fn player_collision_system(
     mut player_query: Query<(&mut PlayerPhysics, &mut Transform, &Sprite)>,
     collision_query: Query<(&Transform, &Sprite), Without<PlayerPhysics>>,
@@ -248,6 +267,7 @@ fn player_collision_system(
                             Collision::Bottom => {
                                 // Reset jumping for the player
                                 player_physics.jump_velocity = JUMPVELOCITY;
+                                player_physics.fall_speed = 10.0;
                                 player_physics.is_grounded = IsGrounded::Grounded;
 
                                 // Make sure player does not endlessly collide with the ground
@@ -280,7 +300,7 @@ fn player_collision_system(
                     },
                     None => {
                         player_physics.is_grounded = IsGrounded::Falling;
-                        println!("falling");
+                        //println!("falling");
                     }
                 }
             }
@@ -299,8 +319,6 @@ fn player_movement_system(
             let player_position: &mut Vec3 = &mut transform.translation;
             let mut direction: f32 = 0.0;
 
-            // Apply gravity
-            player_position.y += player_physics.gravity * time.delta_seconds();
 
             if keyboard_input.pressed(KeyCode::Left) {
                 direction = -1.0;
@@ -331,6 +349,11 @@ fn player_movement_system(
                     player_physics.jump_velocity += player_physics.gravity * time.delta_seconds();
                 },
                 IsGrounded::Falling => {
+                    // Apply gravity
+                    player_position.y += player_physics.fall_speed * time.delta_seconds();
+                    player_physics.fall_speed += player_physics.gravity * time.delta_seconds() - 2.0;
+                    println!("fall speed: {}", player_physics.fall_speed);
+                    println!("gravity: {}", player_physics.gravity);
                 }
             }
 
