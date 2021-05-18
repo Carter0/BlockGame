@@ -12,7 +12,7 @@ const JUMPVELOCITY: f32 = 300.0;
 const GRAVITY: f32 = -10.0;
 
 // fixed timestep is 60 times every second
-const TIMESTEP_2_PER_SECOND: f64 = 1.0 / 60.0;
+const TIMESTEP_60_PER_SECOND: f64 = 1.0 / 60.0;
 
 fn main() {
     App::build()
@@ -33,11 +33,10 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 // This prints out "goodbye world" twice every second
-                .with_run_criteria(FixedTimestep::step(TIMESTEP_2_PER_SECOND))
+                .with_run_criteria(FixedTimestep::step(TIMESTEP_60_PER_SECOND))
                 .with_system(player_movement_system.system())
-                // NOTE not sure if belongs in fixedupdate or update
-                .with_system(player_collision_system.system())
         )
+        .add_system(player_collision_system.system())
         .run();
 }
 
@@ -142,7 +141,7 @@ fn block_physics_system(time: Res<Time>, mut query: Query<(&BlockPhysics, &mut T
     }
 }
 
-// Note* I really don't like the Collidable addition to this.
+// NOTE I really don't like the Collidable addition to this.
 // It gets the queries to work but I wish there was a more elegant way to go about this
 // Now falling blocks are not collidable :(
 // So the player cannot touch them
@@ -199,22 +198,22 @@ struct PlayerPhysics {
     jump_velocity: f32,
     gravity: f32,
     movement_speed: f32,
-    is_grounded: IsGrounded,
+    is_grounded: PlayerState,
     fall_speed: f32
 }
 
-enum IsGrounded {
+enum PlayerState {
     Grounded,
     Jumping,
     Falling
 }
 
-impl fmt::Display for IsGrounded {
+impl fmt::Display for PlayerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            IsGrounded::Grounded => write!(f, "grounded"),
-            IsGrounded::Jumping => write!(f, "jumping"),
-            IsGrounded::Falling => write!(f, "falling"),
+            PlayerState::Grounded => write!(f, "grounded"),
+            PlayerState::Jumping => write!(f, "jumping"),
+            PlayerState::Falling => write!(f, "falling"),
         }
     }
 }
@@ -228,7 +227,7 @@ fn add_player(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial
             ..Default::default()
         })
         .insert(PlayerPhysics {
-            is_grounded: IsGrounded::Grounded,
+            is_grounded: PlayerState::Grounded,
             movement_speed: 50.0,
             jump_velocity: JUMPVELOCITY,
             gravity: GRAVITY,
@@ -236,13 +235,7 @@ fn add_player(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial
         });
 }
 
-// TODO yeah try combining this system and the player movement system
-// tehory is the parralellisation is having problems perhaps
-// do this in another branch
-// TODO Also this needs to happen in fixedupdate. Lets do some research on that
-// because that might very well be the problem :)
-// Yeah because as I noted these systems might be running at slightly different times when I actually
-// want it to run all at the same time
+// TODO Yeah not sure how to fix this :(
 fn player_collision_system(
     mut player_query: Query<(&mut PlayerPhysics, &mut Transform, &Sprite)>,
     collision_query: Query<(&Transform, &Sprite), Without<PlayerPhysics>>,
@@ -268,7 +261,7 @@ fn player_collision_system(
                                 // Reset jumping for the player
                                 player_physics.jump_velocity = JUMPVELOCITY;
                                 player_physics.fall_speed = 10.0;
-                                player_physics.is_grounded = IsGrounded::Grounded;
+                                player_physics.is_grounded = PlayerState::Grounded;
 
                                 // Make sure player does not endlessly collide with the ground
                                 let collided_y_position: f32 = transform.translation.y;
@@ -299,7 +292,7 @@ fn player_collision_system(
                         }
                     },
                     None => {
-                        player_physics.is_grounded = IsGrounded::Falling;
+                        player_physics.is_grounded = PlayerState::Falling;
                         //println!("falling");
                     }
                 }
@@ -330,13 +323,13 @@ fn player_movement_system(
 
 
             match player_physics.is_grounded {
-                IsGrounded::Grounded => {
+                PlayerState::Grounded => {
                     if keyboard_input.pressed(KeyCode::Up) {
                         player_position.y += 5.0;
-                        player_physics.is_grounded = IsGrounded::Jumping;
+                        player_physics.is_grounded = PlayerState::Jumping;
                     }
                 },
-                IsGrounded::Jumping => {
+                PlayerState::Jumping => {
                     // apply jump physics over time
                     // Note* this needs to be tuned up to make it more fun
                     // Currently jumping is like a standard parabola, both sides are equal and obeys mathematical properties
@@ -348,7 +341,7 @@ fn player_movement_system(
                             * time.delta_seconds();
                     player_physics.jump_velocity += player_physics.gravity * time.delta_seconds();
                 },
-                IsGrounded::Falling => {
+                PlayerState::Falling => {
                     // Apply gravity
                     player_position.y += player_physics.fall_speed * time.delta_seconds();
                     player_physics.fall_speed += player_physics.gravity * time.delta_seconds() - 2.0;
