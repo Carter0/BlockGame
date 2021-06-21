@@ -15,6 +15,7 @@ fn main() {
         })
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(DefaultPlugins)
+        .add_plugin(RapierRenderPlugin)
         .add_startup_system(add_player.system())
         .add_startup_system(add_camera.system())
         .add_startup_system(spawn_walls.system())
@@ -26,49 +27,59 @@ fn add_camera(mut commands: Commands) {
 }
 
 //THE WALLS
-fn spawn_walls(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
+fn spawn_walls(mut commands: Commands,
+               mut materials: ResMut<Assets<ColorMaterial>>,
+               rapier_config: ResMut<RapierConfiguration>)
+{
     let wall_material = materials.add(Color::rgb(0.8, 0.8, 0.8).into());
 
     // The floor
     // TODO
     // alright figure out what the hell is going on with this bullshit
     // you have got to line up all the different positions for all these components
+    // NOTE
+    // according to docs, x and y positions here automatically multiplied by raper_config.scale
+    let floor_position: Vec2 = Vec2::new(0.0, -10.0);
+    // println!("{}", rapier_config.scale); //is 20
     commands
         .spawn_bundle(SpriteBundle {
             material: wall_material.clone(),
             // This is the origin point.
-            transform: Transform::from_xyz(0.0, -WINDOWHEIGHT / 2.0 + 15.0, 0.0),
-            // This is the width/length of wall
-            // Starts expanding from the origin point in both directions
-            sprite: Sprite::new(Vec2::new(500.0, 100.0)),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
+            // And I suspect this is pixel units
+            sprite: Sprite::new(Vec2::new(1.0, 1.0)),
             ..Default::default()
         })
         .insert_bundle(ColliderBundle {
-            // NOTE yeah I think you are going to need to figure out
-            // what the x and y of the cuboid should be.
-            shape: ColliderShape::cuboid(1.0, 1.0),
+            position: floor_position.into(),
+            // I suspect this is "physics units"
+            shape: ColliderShape::cuboid(5.0, 5.0),
             ..Default::default()
         })
-        .insert(ColliderPositionSync::Discrete);
-
+        .insert(ColliderPositionSync::Discrete)
+        // TODO
+        // Hopefully you can figure out how to use the debugger lol
+        .insert(ColliderDebugRender {
+            color: Color::GOLD
+        });
 
     // The Left Wall
-    commands
-        .spawn_bundle(SpriteBundle {
-            material: wall_material.clone(),
-            transform: Transform::from_xyz(0.0 - WINDOWWIDTH / 2.0, 0.0, 0.0),
-            sprite: Sprite::new(Vec2::new(50.0, WINDOWHEIGHT)),
-            ..Default::default()
-        });
+    // commands
+    //     .spawn_bundle(SpriteBundle {
+    //         material: wall_material.clone(),
+    //         transform: Transform::from_xyz(0.0 - WINDOWWIDTH / 2.0, 0.0, 0.0),
+    //         sprite: Sprite::new(Vec2::new(50.0, WINDOWHEIGHT)),
+    //         ..Default::default()
+    //     });
 
     // The Right Wall
-    commands
-        .spawn_bundle(SpriteBundle {
-            material: wall_material.clone(),
-            transform: Transform::from_xyz(0.0 + WINDOWWIDTH / 2.0, 0.0, 0.0),
-            sprite: Sprite::new(Vec2::new(50.0, WINDOWHEIGHT)),
-            ..Default::default()
-        });
+    // commands
+    //     .spawn_bundle(SpriteBundle {
+    //         material: wall_material.clone(),
+    //         transform: Transform::from_xyz(0.0 + WINDOWWIDTH / 2.0, 0.0, 0.0),
+    //         sprite: Sprite::new(Vec2::new(50.0, WINDOWHEIGHT)),
+    //         ..Default::default()
+    //     });
 }
 
 
